@@ -137,42 +137,97 @@ def bilateralBlur(x):
     return mask    
 
  
-def grabObjectHSV():
+def grabObjectHSV(morphOp, spectrum):
     """
     Grabs an object in RGB and HSV color space. 
     Show binary frames with the foreground object 
     in white and background in black.
 
     """
-    hsv_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
+    hsv_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)   
+
     
     lower_yellow = np.array([22, 93, 0])
     upper_yellow = np.array([45, 255, 255])
     
-    mask = cv2.inRange(hsv_frame, lower_yellow, upper_yellow)
+       
+    """
+    MORPHOLOGICAL OPERATIONS
+    
+    ----
+    
+    Erosion: 
+        It is useful for removing small white noises.
+        Used to detach two connected objects etc.
+        
+    Dilation:
+        In cases like noise removal, erosion is followed by dilation. Because, erosion removes white noises, but it also shrinks our object. So we dilate it. Since noise is gone, they won’t come back, but our object area increases.
+        It is also useful in joining broken parts of an object.
+        
+    Closing:
+        A dilation followed by an erosion 
+        (i.e. the reverse of the operations for an opening). 
+        closing tends to close gaps in the image.
+    """
+    if(morphOp == 'erosion'):
+        kernel = np.ones((10,10), np.uint8)
+        morph_op = cv2.erode(hsv_frame, kernel, iterations=1) 
+    elif(morphOp == 'dilation'):
+        
+        kernel = np.ones((10,10), np.uint8)
+        morph_op = cv2.dilate(hsv_frame, kernel, iterations=3)
+        
+        
+    elif(morphOp == 'closing'):
+        kernel = np.ones((30,30), np.uint8)
+        morph_op = cv2.morphologyEx(hsv_frame, cv2.MORPH_CLOSE, kernel)
+    elif(morphOp == 'opening'):
+        kernel = np.ones((30,30), np.uint8)
+        morph_op = cv2.morphologyEx(hsv_frame, cv2.MORPH_OPEN, kernel)
+
+    
+    
+    mask = cv2.inRange(morph_op, lower_yellow, upper_yellow)
+    # coversion to make export to video possible
+    mask = cv2.cvtColor(mask, cv2.COLOR_BGR2RGB)
+  # if(spectrum == 'hsv'):
+  #     return hsv_frame
     return mask
 
 
-def sobel():
+def sobel(detection):
     """
     Sobel filter is a 1D discrete derivative filter for edge detection.
     Change in color intensity to detect edges by taking first derivative.
 
     """
-    # Idk, ook eerst smoothen? uittesten
-    #img = cv2.medianBlur(gray, 5)
+
+	# Convert to graycsale
+    img_gray = grayscale()
+
+    # Blur the image for better edge detection
+    img_blur = cv2.GaussianBlur(img_gray, (3,3), 0)
+
     
-    # TODO: combine them together & tweek parameters
-    laplacian = cv2.Laplacian(frame, cv2.CV_8U)
-    sobelx = cv2.Sobel(frame, cv2.CV_8U, 1,0, ksize=3)
-    sobely = cv2.Sobel(frame, cv2.CV_8U, 0,1, ksize=3)
-    
-    return sobelx
+    # sobelx - base = not blurred img
+    if(detection == 'sobelx_noblur'):
+        return cv2.Sobel(frame, cv2.CV_8U, 1,0, ksize=3)
+    elif(detection == 'sobelx'):
+        return cv2.Sobel(img_blur, cv2.CV_8U, 1,0, ksize=3)
+    elif(detection == 'sobely'):
+        return cv2.Sobel(img_blur, cv2.CV_8U, 0,1, ksize=3)
+    elif(detection == 'sobelxy_noblur'):
+        return cv2.Sobel(frame, cv2.CV_8U, dx=1, dy=1, ksize=5)
+    elif(detection == 'sobelxy'):
+        return cv2.Sobel(img_blur, cv2.CV_8U, dx=1, dy=1, ksize=5)
+    else:
+        print('forgot to add a detection parameter')
 
 
-def houghTransform():
+def houghTransform(dp, mindst):
     """
-    ...
+    Hough transform is a feature extraction method for detecting simple 
+    shapes such as circles, lines etc in an image.
 
     """
     gray =cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
@@ -184,7 +239,10 @@ def houghTransform():
     # convert gray back to BGR
     cimg = cv2.cvtColor(img, cv2.COLOR_GRAY2BGR)
     
-    circles = cv2.HoughCircles(img, cv2.HOUGH_GRADIENT, 1, 120, param1=100, param2=30,minRadius=0, maxRadius=0) 
+    
+    circles = cv2.HoughCircles(img, cv2.HOUGH_GRADIENT, dp, mindst, param1=100, param2=30,minRadius=0, maxRadius=0) 
+    
+    
     circles = np.uint16(np.around(circles))
 
     for i in circles[0,:]:
@@ -195,6 +253,29 @@ def houghTransform():
         
     return cimg
 
+    
+def videoTests(fps, curr_frame):
+    # TODO: visualise detected edges
+    # 10s
+   # curr_filter = houghTransform(1, 120)
+    
+        
+    if(curr_frame <= fps*2):
+        curr_filter = houghTransform(1, 120)
+    elif(fps*2 < curr_frame <= fps*4):
+        curr_filter = houghTransform(1, 50)
+        
+    elif(fps*4 < curr_frame <= fps*6):
+         curr_filter = houghTransform(1, 20)
+    elif(fps*6 < curr_frame <= fps*8):
+        curr_filter = houghTransform(2, 120)
+    elif(fps*8 < curr_frame <= fps*10):
+         curr_filter = houghTransform(3, 120)
+    else:   
+        curr_filter = frame
+
+    
+    return curr_filter
 
 
 def objectDetection(minTreshold):
@@ -241,23 +322,166 @@ def objectDetectionTimed():
 
     
 def videoPartOne(fps, curr_frame):
-    
-    cv2.putText(img=frame, text='Hello', org=(150, 250), fontFace=cv2.FONT_HERSHEY_SIMPLEX, fontScale=3, color=(255, 255, 255),thickness=3)    
-    
-    #########################     0-4s: color <-> grayscale 2x     #########################
+    ## color to grayscale several times (0-4s) ------------------------------------------
     if(fps < curr_frame <= fps*2 or fps*3 < curr_frame <= fps*4):
-        mask = grayscale()
+        curr_filter = grayscale()
+        labeled = cv2.putText(img=curr_filter, text='grayscale', org=(150, 250), fontFace=cv2.FONT_HERSHEY_SIMPLEX, fontScale=3, color=(255, 255, 255),thickness=3)    
     elif(fps*2 < curr_frame <= fps*3):
-        mask = frame
+        curr_filter = frame
+        labeled = cv2.putText(img=curr_filter, text='normal frame', org=(150, 250), fontFace=cv2.FONT_HERSHEY_SIMPLEX, fontScale=3, color=(255, 255, 255),thickness=3)    
+    #start: 0, 200, 800   
+    
+    ## Blur (4-12s) ------------------------------------------
+    # gaussian blur (frame 200-400)
+    elif(fps*4 < curr_frame <= fps*8):
+        val = round((curr_frame-200)/10, 1)
+        curr_filter = cv2.GaussianBlur(frame, (9,9), val)
+        labeled = cv2.putText(img=curr_filter, text='Gaussian blur', org=(150, 250), fontFace=cv2.FONT_HERSHEY_SIMPLEX, fontScale=3, color=(255, 255, 255),thickness=3)    
+
+    # Bi-lateral filter 
+        #curr_frame: start: 400 - 800
+        # highly effective in noise removal while keeping edges sharp. But the operation is slower compared to other filters.
+        # Mus be an integer between 2 and 36
+    elif(fps*8 < curr_frame <= fps*9):
+        curr_filter = bilateralBlur(2)
+        labeled = cv2.putText(img=curr_filter, text='BilateralBlur (2)', org=(150, 250), fontFace=cv2.FONT_HERSHEY_SIMPLEX, fontScale=3, color=(255, 255, 255),thickness=3)    
+    elif(fps*9 < curr_frame <= fps*10):
+        curr_filter = bilateralBlur(15)   
+        labeled = cv2.putText(img=curr_filter, text='BilateralBlur (15)', org=(150, 250), fontFace=cv2.FONT_HERSHEY_SIMPLEX, fontScale=3, color=(255, 255, 255),thickness=3)    
+
+    elif(fps*10 < curr_frame <= fps*11):
+        curr_filter = bilateralBlur(21)
+        labeled = cv2.putText(img=curr_filter, text='BilateralBlur (21)', org=(150, 250), fontFace=cv2.FONT_HERSHEY_SIMPLEX, fontScale=3, color=(255, 255, 255),thickness=3)    
+    elif(fps*11 < curr_frame <= fps*12):
+        curr_filter = bilateralBlur(31) # Time consuming
+        labeled = cv2.putText(img=curr_filter, text='BilateralBlur (31)', org=(150, 250), fontFace=cv2.FONT_HERSHEY_SIMPLEX, fontScale=3, color=(255, 255, 255),thickness=3)    
+               
+    # Black and white ------------------------------------------
+    # TODO: CHANGES IN ANOTHER COLOR
+    elif(fps*12 < curr_frame <= fps*14): # 0-2s
+        curr_filter = grabObjectHSV('dilation', 'binary')    
+        labeled = cv2.putText(img=curr_filter, text='Dilation', org=(150, 250), fontFace=cv2.FONT_HERSHEY_SIMPLEX, fontScale=3, color=(255, 255, 255),thickness=3)    
+    elif(fps*14 < curr_frame <= fps*16): # 2-4s
+        curr_filter = grabObjectHSV('erosion', 'binary')
+        labeled = cv2.putText(img=curr_filter, text='Erosion', org=(150, 250), fontFace=cv2.FONT_HERSHEY_SIMPLEX, fontScale=3, color=(255, 255, 255),thickness=3)    
+    elif(fps*16 < curr_frame <= fps*18):
+        curr_filter = grabObjectHSV('closing', 'binary')
+        labeled = cv2.putText(img=curr_filter, text='Closing', org=(150, 250), fontFace=cv2.FONT_HERSHEY_SIMPLEX, fontScale=3, color=(255, 255, 255),thickness=3)    
+    elif(fps*18 < curr_frame <= fps*20):
+        curr_filter = grabObjectHSV('opening', 'binary')
+        labeled = cv2.putText(img=curr_filter, text='Opening', org=(150, 250), fontFace=cv2.FONT_HERSHEY_SIMPLEX, fontScale=3, color=(255, 255, 255),thickness=3)    
         
+    ## DEFAULT
     else:
-        mask = frame
+        curr_filter = frame
+        labeled = cv2.putText(img=curr_filter, text='normal frame', org=(150, 250), fontFace=cv2.FONT_HERSHEY_SIMPLEX, fontScale=3, color=(255, 255, 255),thickness=3)    
         
-    return mask
+    return labeled
+
+
+
+def videoPartTwo(offset, fps, curr_frame):
+    nfps = fps + offset
+    
+    if(curr_frame <= nfps):
+        curr_filter = sobel('sobelx_noblur')
+        
+    elif(nfps < curr_frame <= nfps*2):
+        curr_filter = sobel('sobelx')
+    elif(nfps*2 < curr_frame <= nfps*3):
+        curr_filter = sobel('sobely')
+    elif(nfps*3 < curr_frame <= nfps*4):
+        curr_filter = sobel('sobelxy')
+    elif(nfps*4 < curr_frame <= nfps*5):
+        curr_filter = sobel('sobelxy_noblur')    
+    else:
+        curr_filter = frame
+    
+    # TODO: return label
+    
+    return curr_filter
+        
+        
     
 
+
+
+
+# =============================================================================
+#     if(curr_frame <= fps*2): # 0-2s
+#         curr_filter = grabObjectHSV('dilation', 'binary')    
+#         labeled = cv2.putText(img=curr_filter, text='Dilation', org=(150, 250), fontFace=cv2.FONT_HERSHEY_SIMPLEX, fontScale=3, color=(255, 255, 255),thickness=3)    
+#     elif(fps*2 < curr_frame <= fps*4): # 2-4s
+#         curr_filter = grabObjectHSV('erosion', 'binary')
+#         labeled = cv2.putText(img=curr_filter, text='Erosion', org=(150, 250), fontFace=cv2.FONT_HERSHEY_SIMPLEX, fontScale=3, color=(255, 255, 255),thickness=3)    
+#     elif(fps*4 < curr_frame <= fps*6):
+#         curr_filter = grabObjectHSV('closing', 'binary')
+#         labeled = cv2.putText(img=curr_filter, text='Closing', org=(150, 250), fontFace=cv2.FONT_HERSHEY_SIMPLEX, fontScale=3, color=(255, 255, 255),thickness=3)    
+#     elif(fps*6 < curr_frame <= fps*8):
+#         curr_filter = grabObjectHSV('opening', 'binary')
+#         labeled = cv2.putText(img=curr_filter, text='Opening', org=(150, 250), fontFace=cv2.FONT_HERSHEY_SIMPLEX, fontScale=3, color=(255, 255, 255),thickness=3)    
+#     return labeled
+#
+# =============================================================================
+    
+    
+# =============================================================================
+#     if(curr_frame <= fps):
+#         curr_filter = sobel('sobelx_noblur')
+#         #curr_filter = cv2.drawContours(curr_filter, countours, -1, (0, 255, 0), 2)
+#     elif(fps < curr_frame <= fps*2):
+#         curr_filter = sobel('sobelx')
+#     elif(fps*2 < curr_frame <= fps*3):       
+#         curr_filter = sobel('sobely')
+#     elif(fps*3 < curr_frame <= fps*4):       
+#         curr_filter = sobel('sobelxy')
+#     elif(fps*4 < curr_frame <= fps*5):
+#         curr_filter = sobel('sobelxy_noblur')
+# 
+#     else:
+#         curr_filter = frame
+#     
+#     return curr_filter
+# =============================================================================
+# =============================================================================
+        
+        
+# =============================================================================
+#         # TODO: CHANGES IN ANOTHER COLOR
+#         if(curr_frame <= fps): # 0-2s
+#             curr_filter = grabObjectHSV('dilation', 'hsv')
+#         elif(fps < curr_frame <= fps*2): # 0-2s
+#             curr_filter = grabObjectHSV('dilation', 'binary')
+#         elif(fps*2 < curr_frame <= fps*3): # 2-4s
+#         
+#             curr_filter = grabObjectHSV('erosion', 'hsv')
+#         elif(fps*3 < curr_frame <= fps*4): # 2-4s
+#             curr_filter = grabObjectHSV('erosion', 'binary')
+#             
+#         elif(fps*4 < curr_frame <= fps*5):
+#             curr_filter = grabObjectHSV('closing', 'hsv')
+#         elif(fps*5 < curr_frame <= fps*6):
+#             curr_filter = grabObjectHSV('closing', 'binary')
+#         
+#         elif(fps*6 < curr_frame <= fps*7):
+#             curr_filter = grabObjectHSV('opening', 'hsv')
+#         elif(fps*7 < curr_frame <= fps*8):
+#             curr_filter = grabObjectHSV('opening', 'binary')
+#         else:
+#             curr_filter = frame
+# =============================================================================
+        
+    
+
+
 def video(fps, curr_frame):
-    vid = videoPartOne(fps, curr_frame)
+    
+    #vid = videoPartOne(fps, curr_frame)
+    #vid = videoPartTwo(20, fps, curr_frame)
+    
+ 
+    vid = videoTests(fps, curr_frame)
+    
     
     return vid
 
@@ -266,6 +490,7 @@ while(True):
     # Capture frame-by-frame
     ret, frame = cap.read()
     print(curr_frame)
+
 
     #curr_filter = frame
     
@@ -288,37 +513,16 @@ while(True):
     # Effect: portrait mode (achtergrond vaag, object scherp)
     # Afbeelding laten verdwijnen
     
+    
+    
+    
+    
     curr_filter = video(fps, curr_frame)
-
-    """
-
-    #########################            4-12s: blur                #########################
     
-    ## Gaussian filter
-    # curr frame between fps 200-400
-    if(fps*4 < curr_frame <= fps*8):
-        # V1: loopje dat gaussian filter opent
-        val = round((curr_frame-200)/10, 1)
-        curr_filter = cv2.GaussianBlur(frame, (9,9), val)
-        print(val)
-        
-        #val = round((curr_frame-200)/10, 1)
-        #curr_filter = cv2.GaussianBlur(frame, (9,9), val)
-        
-    ## Bi-lateral filter
-    # highly effective in noise removal while keeping edges sharp. But the operation is slower compared to other filters.
-    elif(fps*8 < curr_frame <= fps*9):
-        curr_filter = cv2.bilateralFilter(frame,2,75,75)
-    elif(fps*9 < curr_frame <= fps*10):
-        curr_filter = cv2.bilateralFilter(frame,9,75,75)     
-    elif(fps*10 < curr_frame <= fps*11):
-        curr_filter = cv2.bilateralFilter(frame,15,75,75)  
-    elif(fps*11 < curr_frame <= fps*12):
-        curr_filter = cv2.bilateralFilter(frame,21,75,75)     
-        
-     """
-
+    #curr_filter = bilateralBlur(31)
     
+    
+
 # =============================================================================
     #curr_filter = cv2.bitwise_not(frame)
     
