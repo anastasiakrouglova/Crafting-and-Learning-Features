@@ -30,7 +30,12 @@ frame_height = int(cap.get(4))
 # converted and downsampled to a MPEG-4 format.
 # Define the codec and create VideoWriter object.The output is stored in 'outpy.avi' file.
 out = cv2.VideoWriter('outpy.avi',cv2.VideoWriter_fourcc('M','J','P','G'), fps, (frame_width,frame_height))
+# make new out voor andere img
+# VOOR LATER: naar outpy.avi schrijven (zo 2 vids combineren)
+out_grey = cv2.VideoWriter('greysim.avi',cv2.VideoWriter_fourcc('M','J','P','G'), fps, (frame_width,frame_height))
+#out_grey = cv2.VideoWriter('greysim.avi',cv2.VideoWriter_fourcc('M','J','P','G'), fps, (435, 1129))
 
+ 
 
  # out = cv2.VideoWriter('grey.avi',fourcc, 30.0, (800,600), isColor=False)
 
@@ -172,11 +177,13 @@ def grabObjectHSV(morphOp, spectrum):
     if(morphOp == 'erosion'):
         kernel = np.ones((10,10), np.uint8)
         morph_op = cv2.erode(hsv_frame, kernel, iterations=1) 
+        
+       # print(morph_op) -> 0 of 255 - RED
     elif(morphOp == 'dilation'):
         
         kernel = np.ones((10,10), np.uint8)
         morph_op = cv2.dilate(hsv_frame, kernel, iterations=3)
-        
+        #print(morph_op) -> 0 of 255 - GREEN ETC EN OVERLAPPING IS WIT!! *[255, 0,0] doen etc
         
     elif(morphOp == 'closing'):
         kernel = np.ones((30,30), np.uint8)
@@ -242,79 +249,70 @@ def houghTransform(dp, mindst):
     
     circles = cv2.HoughCircles(img, cv2.HOUGH_GRADIENT, dp, mindst, param1=100, param2=30,minRadius=0, maxRadius=0) 
     
+    if circles is not None:
+        circles = np.uint16(np.around(circles))
     
-    circles = np.uint16(np.around(circles))
-
-    for i in circles[0,:]:
-        #draw the outer circle
-        cv2.circle(cimg, (i[0], i[1]), i[2],(0,255,0), 3)
-        #draw the center of the circle
-        cv2.circle(cimg, (i[0], i[1]), 2, (0,0,255), 5)
+        for i in circles[0,:]:
+            #draw the outer circle
+            cv2.circle(cimg, (i[0], i[1]), i[2],(0,255,0), 3)
+            #draw the center of the circle
+            cv2.circle(cimg, (i[0], i[1]), 2, (0,0,255), 5)
         
     return cimg
 
-    
-def videoTests(fps, curr_frame):
-    # TODO: visualise detected edges
-    # 10s
-   # curr_filter = houghTransform(1, 120)
-    
-        
-    if(curr_frame <= fps*2):
-        curr_filter = houghTransform(1, 120)
-    elif(fps*2 < curr_frame <= fps*4):
-        curr_filter = houghTransform(1, 50)
-        
-    elif(fps*4 < curr_frame <= fps*6):
-         curr_filter = houghTransform(1, 20)
-    elif(fps*6 < curr_frame <= fps*8):
-        curr_filter = houghTransform(2, 120)
-    elif(fps*8 < curr_frame <= fps*10):
-         curr_filter = houghTransform(3, 120)
-    else:   
-        curr_filter = frame
 
-    
-    return curr_filter
-
-
-def objectDetection(minTreshold):
+def objectDetection():
     """
-    ...
-     
+    template matching
+    
     """
-    # look at a smaller piece of video
-    #belt = frame[102:342, 134:549]
+    gray_img = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+    template = cv2.imread('assets/template.jpg', cv2.IMREAD_GRAYSCALE)
     
-    gray = grayscale()
     
-    _, threshold = cv2.threshold(gray, minTreshold, 255, cv2.THRESH_BINARY)
+    h, w = template.shape
     
-    # Detect object
-    contours, _ = cv2.findContours(threshold, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-    for cnt in contours:
-        (x, y, w, h) = cv2.boundingRect(cnt)
-        rectangle = cv2.rectangle(frame, (x,y), (x + w, y + h), (0, 255, 0), 3)
+    
+    #resized_gray = cv2.resize(gray_img, (2160, 3840), interpolation = cv2.INTER_AREA)
+
+    
+    result = cv2.matchTemplate(gray_img, template, cv2.TM_CCOEFF_NORMED)
+    #result = cv2.matchTemplate(gray_img, template, cv2.TM_CCOEFF)
+
+    
+    print(result.shape) #(435, 1129)
+    print(gray_img.shape) # (1080, 1920)
+    print(result) # kansen ipv img
+    
+    min_val, max_val, min_loc, max_loc = cv2.minMaxLoc(result)
+    
+    
+    bottom_right = (max_loc[0] + w, max_loc[1] + h)
+    
+    image = cv2.rectangle(frame, max_loc, bottom_right, (255, 0, 255), 2)
+    
+    
         
-    return frame
-
-
-def objectDetectionTimed():
-    # variable to change threshold
-    #minThreshold = 88
-    #FIXEN!!!! ZIE GRAYSCALE
+    template = cv2.cvtColor(template, cv2.COLOR_GRAY2BGR) 
+    gray_img = cv2.cvtColor(gray_img, cv2.COLOR_GRAY2BGR) 
     
-    gray = grayscale()
+    result = cv2.cvtColor(result, cv2.COLOR_GRAY2BGR) 
     
-    #if(curr_frame < 100):
-       # return objectDetection(minThreshold)
+    print(result)
+    
+    #print(resized.shape)
+    result = result - result.min() # Now between 0 and 8674
+    result = result / result.max() * 255
+    
+    arr = np.uint8(result)
+    
+    resized = cv2.resize(arr, (1920,1080), interpolation = cv2.INTER_AREA)
 
-    #elif(100 <= curr_frame < 250):
-    # ideaal: onder -> zie je stuk van draaiding, erboven stuk van eend weggaat
-    #gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-    #_, threshold = cv2.threshold(gray, minThreshold, 255, cv2.THRESH_BINARY)
 
-    return gray
+    return resized
+
+
+
     
 
 
@@ -383,6 +381,7 @@ def videoPartOne(fps, curr_frame):
 def videoPartTwo(offset, fps, curr_frame):
     nfps = fps + offset
     
+    # sobel filter
     if(curr_frame <= nfps):
         curr_filter = sobel('sobelx_noblur')
         
@@ -394,17 +393,40 @@ def videoPartTwo(offset, fps, curr_frame):
         curr_filter = sobel('sobelxy')
     elif(nfps*4 < curr_frame <= nfps*5):
         curr_filter = sobel('sobelxy_noblur')    
-    else:
+
+  
+    # Hough transform
+    elif(nfps*5 < curr_frame <= nfps*7):
+        curr_filter = houghTransform(3, 120)
+    elif(nfps*7 < curr_frame <= nfps*9):
+        curr_filter = houghTransform(2, 120)
+    elif(nfps*9 < curr_frame <= fps*11):
+        curr_filter = houghTransform(1, 120)
+    elif(fps*11 < curr_frame <= fps*13):
+        curr_filter = houghTransform(1, 50)
+    elif(fps*13 < curr_frame <= fps*15):
+       curr_filter = houghTransform(1, 20)
+    else:   
         curr_filter = frame
     
-    # TODO: return label
+    # template matching
     
+    
+    # TODO: return label
     return curr_filter
         
         
     
 
+    
+def videoTests(fps, curr_frame):
+    # TODO: visualise detected edges
+    # 10s
+   # curr_filter = houghTransform(1, 120)
+   curr_filter = objectDetection()
 
+   return curr_filter
+   
 
 
 # =============================================================================
@@ -519,6 +541,8 @@ while(True):
     
     curr_filter = video(fps, curr_frame)
     
+    greysim_filter = objectDetection()
+    
     #curr_filter = bilateralBlur(31)
     
     
@@ -544,14 +568,19 @@ while(True):
 
     # Als meedere filters niet gaan werken; if-statement met im-show!
     # dus if(.. seconden ): imshow(filter1), else imshow(filter2)
-    cv2.imshow('filter', curr_filter)
+    #cv2.imshow('filter', curr_filter)
+    print("GREY", greysim_filter.shape)
+    print("CURR",curr_filter.shape)
+    
+    cv2.imshow('grey_sim', greysim_filter)
     
     curr_frame += 1
     
-   
-    
+
     # output video
-    out.write(curr_filter) 
+    #out.write(curr_filter) 
+    
+    out_grey.write(greysim_filter)
     
 
     if cv2.waitKey(20) & 0xFF == ord('q'):
