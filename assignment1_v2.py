@@ -87,67 +87,48 @@ def bilateralBlur(x):
 
  
 def grabtest():
-    # load images
-    
     hsv_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)  
     
-    #lower_yellow = np.array([22, 93, 0])
-    #upper_yellow = np.array([45, 255, 255])
-    
-    lower = np.array([150, 150, 150])
-    upper = np.array([255, 255, 255])
+    lower_yellow = np.array([22, 93, 0])
+    upper_yellow = np.array([45, 255, 255])
     
     kernel = np.ones((10,10), np.uint8)
+    kernel2 = np.ones((30,30), np.uint8)
     
     erode = cv2.erode(hsv_frame, kernel, iterations=1) 
     dilate = cv2.dilate(hsv_frame, kernel, iterations=1)
-    
-    #image1 = frame
-    #image2 = frame + 50
-    
-    
-    # kernel = np.ones((30,30), np.uint8)
-    # image2 = cv2.morphologyEx(hsv_frame, cv2.MORPH_CLOSE, kernel)
-    
+    closing = cv2.morphologyEx(hsv_frame, cv2.MORPH_CLOSE, kernel2)
+    opening = cv2.morphologyEx(hsv_frame, cv2.MORPH_OPEN, kernel2)
     
     
     # compute difference
     difference = cv2.subtract(dilate, erode)
-    #difference = cv2.subtract(image1, image2)
-
     
-    #print(difference)
-    
-    # color the mask red
-    #difference = cv2.cvtColor(difference, cv2.COLOR_HSV2BGR)  
     
     Conv_hsv_Gray = cv2.cvtColor(difference, cv2.COLOR_BGR2GRAY)
     
     ret, mask = cv2.threshold(Conv_hsv_Gray, 50, 255, cv2.THRESH_BINARY_INV)
-    #difference = cv2.cvtColor(difference, cv2.COLOR_HSV2BGR)  
     
     difference[mask != 255] = [0, 0, 255]
-    print(difference)
-    #print(mask)
-    
     difference[mask == 255] = [0, 0, 0]
     
     # add the red mask to the images to make the differences obvious
     #erode[mask != 255] = [0, 0, 255]
     #dilate[mask != 255] = [0, 0, 255]
     
-   # mask = cv2.inRange(difference, lower_yellow, upper_yellow)
-   
-    #mask = cv2.inRange(difference, lower, upper)
+    #img2 = cv2.bitwise_and(difference,difference,mask = mask)
     
-    #Erode = cv2.inRange(dilate, lower_yellow, upper_yellow)
-   # maskDilate = cv2.inRange(dilate, lower_yellow, upper_yellow)
-   
-   #Conv_hsv_Gray = cv2.cvtColor(difference, cv2.COLOR_BGR2GRAY)
+    mask_fund = cv2.inRange(dilate, lower_yellow, upper_yellow)
+    mask_fund = cv2.cvtColor(mask_fund, cv2.COLOR_BGR2RGB)
     
     
     
-    return difference
+    res = cv2.add(mask_fund, difference)
+
+    
+    
+    #return difference
+    return res
 
 def grabObjectHSV(morphOp, spectrum):
     """
