@@ -9,24 +9,17 @@ Created on Sun Mar  6 09:33:12 2022
 
 import numpy as np
 import cv2 
-#from lib.videoConf import CFEVideoConf
 import dlib
 from math import hypot
 
-#cap = cv2.VideoCapture(0)
 
-cap = cv2.VideoCapture('assets/footage.mp4')
-
-
+cap = cv2.VideoCapture('assets/footage_2.mp4')
 
 fps = 50
-#config = CFEVideoConf(cap, filepath=save_path, res='480p')
-#out = cv2.VideoWriter(save_path, config.video_type, fps, config.dims)
 curr_frame = 0
 
-
-# Default resolutions of the frame are obtained.The default resolutions are system dependent.
-# We convert the resolutions from float to integer.
+# Default resolutions of the frame are obtained and system dependent.
+# Convert the resolutions from float to integer.
 frame_width = int(cap.get(3))
 frame_height = int(cap.get(4))
     
@@ -37,8 +30,6 @@ frame_height = int(cap.get(4))
 out = cv2.VideoWriter('outpy.avi',cv2.VideoWriter_fourcc('M','J','P','G'), fps, (frame_width,frame_height))
 
 detector = dlib.get_frontal_face_detector()
-
- # out = cv2.VideoWriter('grey.avi',fourcc, 30.0, (800,600), isColor=False)
 
 
 def verify_alpha_channel(frame):
@@ -126,6 +117,8 @@ def grabObjectHSV(morphOp, spectrum):
         A dilation followed by an erosion 
         (i.e. the reverse of the operations for an opening). 
         closing tends to close gaps in the image.
+    Closing:
+        Opposite of closing (erosion followed by dilation)
     """
     
     if(morphOp == 'erosion'):
@@ -134,7 +127,6 @@ def grabObjectHSV(morphOp, spectrum):
         
        # print(morph_op) -> 0 of 255 - RED
     elif(morphOp == 'dilation'):
-        
         kernel = np.ones((10,10), np.uint8)
         morph_op = cv2.dilate(hsv_frame, kernel, iterations=3)
         #print(morph_op) -> 0 of 255 - GREEN ETC EN OVERLAPPING IS WIT!! *[255, 0,0] doen etc
@@ -151,8 +143,6 @@ def grabObjectHSV(morphOp, spectrum):
     mask = cv2.inRange(morph_op, lower_yellow, upper_yellow)
     # coversion to make export to video possible
     mask = cv2.cvtColor(mask, cv2.COLOR_BGR2RGB)
-  # if(spectrum == 'hsv'):
-  #     return hsv_frame
   
     return mask
 
@@ -169,7 +159,6 @@ def sobel(detection):
 
     # Blur the image for better edge detection
     img_blur = cv2.GaussianBlur(img_gray, (3,3), 0)
-
     
     # sobelx - base = not blurred img
     if(detection == 'sobelx_noblur'):
@@ -193,14 +182,12 @@ def houghTransform(dp, mindst):
 
     """
     gray =cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-    # Finite difference filters respond strongly to noise, so
-    # Smoothing edges, by forcing pixels different
-    # from their nieghbors to look more like neighbors, helps forecome the problem
+    # Finite difference filters respond strongly to noise, so smoothing edges,
+    # by forcing pixels different from their nieghbors to look more like neighbors, helps forecome the problem
     img = cv2.medianBlur(gray, 5)
     
     # convert gray back to BGR
     cimg = cv2.cvtColor(img, cv2.COLOR_GRAY2BGR)
-    
     
     circles = cv2.HoughCircles(img, cv2.HOUGH_GRADIENT, dp, mindst, param1=100, param2=30,minRadius=0, maxRadius=0) 
     
@@ -222,19 +209,14 @@ def objectDetection(part):
     
     """
     gray_img = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-    template = cv2.imread('assets/face.png', cv2.IMREAD_GRAYSCALE)
+    template = cv2.imread('assets/duck.png', cv2.IMREAD_GRAYSCALE)
     
     h, w = template.shape
+    # returns chances (i.e. intensity values proportional to the likelihood) in black and white
     result = cv2.matchTemplate(gray_img, template, cv2.TM_CCOEFF_NORMED)
-
-    
-    print(result.shape) #(435, 1129)
-    print(gray_img.shape) # (1080, 1920)
-    print(result) # kansen ipv img
     
     min_val, max_val, min_loc, max_loc = cv2.minMaxLoc(result)
-    
-    
+
     bottom_right = (max_loc[0] + w, max_loc[1] + h)
     
     image = cv2.rectangle(frame, max_loc, bottom_right, (255, 0, 255), 2)
@@ -243,12 +225,13 @@ def objectDetection(part):
     gray_img = cv2.cvtColor(gray_img, cv2.COLOR_GRAY2BGR) 
     
     result = cv2.cvtColor(result, cv2.COLOR_GRAY2BGR) 
-    result = result - result.min() # Now between 0 and 8674
+    result = result - result.min() # between 0 and 8674
     result = result / result.max() * 255
     
     arr = np.uint8(result)
-    
-    resized = cv2.resize(arr, (1920,1080), interpolation = cv2.INTER_AREA)
+    # result gives other resolutions (result of substraction between original image - template)
+    # so have to be resized to keep same sizes
+    resized = cv2.resize(arr, (1600,900), interpolation = cv2.INTER_AREA)
 
     if(part == 'rect'):
         return image
@@ -259,6 +242,11 @@ def objectDetection(part):
 
 
 def instafilter(param):
+    """
+    This filter recognizes faces by using a shape predictor (face)
+    and replaces the original face with Richard Feynman's
+
+    """
     face_img = cv2.imread("assets/insta/richard2.png")
     
     gray_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
@@ -267,10 +255,8 @@ def instafilter(param):
     predictor= dlib.shape_predictor("assets/insta/shape_predictor_68_face_landmarks.dat")
     
     for face in faces:
-        print(face)
         landmarks = predictor(gray_frame, face)
         
-        bottom_head = (landmarks.part(8).x, landmarks.part(8).y)
         left_head = (landmarks.part(0).x, landmarks.part(0).y)
         right_head = (landmarks.part(16).x, landmarks.part(16).y)
         center_head = (landmarks.part(30).x, landmarks.part(30).y)
@@ -286,10 +272,7 @@ def instafilter(param):
                         int(center_head[1] + head_height / 2))
         
         if(param == 'rect'):
-            cv2.rectangle(frame, top_left,
-                          bottom_right,
-                          (0, 255, 0),
-                          2 )
+            cv2.rectangle(frame, top_left, bottom_right,(0, 255, 0), 2 )
         elif(param == 'face'):
             head_img = cv2.resize(face_img, (head_width, head_height))
             head_img_gray = cv2.cvtColor(head_img, cv2.COLOR_BGR2GRAY)
@@ -309,6 +292,11 @@ def instafilter(param):
     
     
 def sharpen():   
+    """
+    Sharpening filters are used to enhance the edges of objects 
+    and adjust the contrast and the shade characteristics.
+
+    """
     sharpening_filter = np.array([[-1, -1, -1],
                                   [-1, 9, -1],
                                   [-1, -1, -1]])
@@ -319,14 +307,19 @@ def sharpen():
 
 
 def sepia(curr_filter, intensity=0.5):
-     blue = 20
-     green = 66 
-     red = 112
-     curr_filter = apply_color_overlay(frame, 
+    """
+    Sepia effect is one of the most used filter when editing images.
+    It adds a warm brown tone to the pictures.
+
+    """
+    blue = 20
+    green = 66 
+    red = 112
+    curr_filter = apply_color_overlay(frame, 
                                        intensity=intensity, 
                                        blue=blue, green=green, red=red)
      
-     return curr_filter
+    return curr_filter
 
     
 def videoPartOne(fps, curr_frame):
@@ -462,7 +455,9 @@ def videoPartThree(offset, fps, curr_frame):
     
 def videoTests(fps, curr_frame):
     # to test seperate filters
-    curr = instafilter('face')
+    #curr = instafilter('face')
+    
+    curr = objectDetection('gray')
 
     return curr
 
@@ -484,8 +479,8 @@ while(True):
     # Capture frame-by-frame
     ret, frame = cap.read()
     
-    curr_filter = video(fps, curr_frame)
-    #curr_filter = videoTests(fps, curr_frame)
+    #curr_filter = video(fps, curr_frame)
+    curr_filter = videoTests(fps, curr_frame)
     
     
     cv2.imshow('filter', curr_filter)
